@@ -2,7 +2,7 @@ package com.releaseops.dto.service;
 
 import com.releaseops.model.ServiceStatus;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record ServiceResponse(
         Long id,
@@ -12,7 +12,7 @@ public record ServiceResponse(
         String repositoryUrl,
         String productionUrl,
         ServiceStatus status,
-        LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        Instant createdAt,
+        Instant updatedAt
 ) {
 }
