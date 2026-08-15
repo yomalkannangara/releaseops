@@ -3,7 +3,7 @@ package com.releaseops.dto.deployment;
 import com.releaseops.model.DeploymentEnvironment;
 import com.releaseops.model.DeploymentStatus;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record DeploymentResponse(
         Long id,
@@ -13,8 +13,12 @@ public record DeploymentResponse(
         String commitSha,
         DeploymentEnvironment environment,
         DeploymentStatus status,
+        String triggeredBy,
+        Integer durationSeconds,
         String pipelineUrl,
-        LocalDateTime deployedAt,
-        LocalDateTime createdAt
+        String failureReason,
+        Instant deployedAt,
+        Instant createdAt,
+        Instant updatedAt
 ) {
 }
