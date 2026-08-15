@@ -12,6 +12,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/services")
@@ -26,6 +27,7 @@ public class SoftwareServiceController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'ENGINEER')")
     public ResponseEntity<ServiceResponse> createService(
             @Valid @RequestBody CreateServiceRequest request
     ) {
@@ -58,6 +60,7 @@ public class SoftwareServiceController {
     }
 
     @PatchMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ENGINEER')")
     public ResponseEntity<ServiceResponse> updateService(
             @PathVariable Long id,
             @Valid @RequestBody UpdateServiceRequest request
@@ -68,6 +71,7 @@ public class SoftwareServiceController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteService(
             @PathVariable Long id
     ) {
