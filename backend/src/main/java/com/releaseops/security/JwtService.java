@@ -60,6 +60,9 @@ public class JwtService {
                 && userDetails.isEnabled();
     }
 
+    public long getExpirationSeconds() {
+        return expirationMs / 1000;
+    }
     private Claims extractAllClaims(String token) {
         return Jwts.parser()
                 .verifyWith(signingKey)
