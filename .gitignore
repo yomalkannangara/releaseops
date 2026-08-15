@@ -55,7 +55,6 @@ docker-compose.override.yml
 
 # Database backups
 backups/
-*.sql
 
 # Temporary files
 *.tmp
