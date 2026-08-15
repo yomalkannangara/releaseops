@@ -19,7 +19,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.releaseops.service.AuditLogService;
+import java.util.Map;
 import java.time.Instant;
 
 @Service
@@ -29,27 +30,27 @@ public class IncidentServiceImpl implements IncidentService {
     private final IncidentRepository incidentRepository;
     private final SoftwareServiceRepository serviceRepository;
     private final AppUserRepository appUserRepository;
+    private final AuditLogService auditLogService;
 
     public IncidentServiceImpl(
             IncidentRepository incidentRepository,
             SoftwareServiceRepository serviceRepository,
-            AppUserRepository appUserRepository
-    ) {
+            AppUserRepository appUserRepository,
+            AuditLogService auditLogService) {
         this.incidentRepository = incidentRepository;
         this.serviceRepository = serviceRepository;
         this.appUserRepository = appUserRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Override
     public IncidentResponse createIncident(
-            CreateIncidentRequest request
-    ) {
+            CreateIncidentRequest request) {
         SoftwareService service = serviceRepository
                 .findById(request.serviceId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Service not found with ID: "
-                                + request.serviceId()
-                ));
+                                + request.serviceId()));
 
         Incident incident = new Incident();
         incident.setService(service);
@@ -60,7 +61,17 @@ public class IncidentServiceImpl implements IncidentService {
         incident.setReportedBy(getCurrentUser());
 
         Incident savedIncident = incidentRepository.save(incident);
-
+        auditLogService.record(
+                "CREATED",
+                "INCIDENT",
+                savedIncident.getId(),
+                Map.of(
+                        "serviceId",
+                        savedIncident.getService().getId(),
+                        "severity",
+                        savedIncident.getSeverity().name(),
+                        "status",
+                        savedIncident.getStatus().name()));
         return toResponse(savedIncident);
     }
 
@@ -76,33 +87,30 @@ public class IncidentServiceImpl implements IncidentService {
             Long serviceId,
             IncidentStatus status,
             IncidentSeverity severity,
-            Pageable pageable
-    ) {
+            Pageable pageable) {
         return incidentRepository
                 .findAllFiltered(
                         serviceId,
                         status,
                         severity,
-                        pageable
-                )
+                        pageable)
                 .map(this::toResponse);
     }
 
     @Override
     public IncidentResponse updateIncident(
             Long id,
-            UpdateIncidentRequest request
-    ) {
+            UpdateIncidentRequest request) {
         Incident incident = findIncident(id);
-
+        IncidentStatus previousStatus = incident.getStatus();
+        IncidentSeverity previousSeverity = incident.getSeverity();
         if (request.title() != null) {
             incident.setTitle(request.title().trim());
         }
 
         if (request.description() != null) {
             incident.setDescription(
-                    request.description().trim()
-            );
+                    request.description().trim());
         }
 
         if (request.severity() != null) {
@@ -113,16 +121,26 @@ public class IncidentServiceImpl implements IncidentService {
             updateStatus(incident, request.status());
         }
 
-        Incident updatedIncident =
-                incidentRepository.saveAndFlush(incident);
-
+        Incident updatedIncident = incidentRepository.saveAndFlush(incident);
+        auditLogService.record(
+                "UPDATED",
+                "INCIDENT",
+                updatedIncident.getId(),
+                Map.of(
+                        "previousStatus",
+                        previousStatus.name(),
+                        "newStatus",
+                        updatedIncident.getStatus().name(),
+                        "previousSeverity",
+                        previousSeverity.name(),
+                        "newSeverity",
+                        updatedIncident.getSeverity().name()));
         return toResponse(updatedIncident);
     }
 
     private void updateStatus(
             Incident incident,
-            IncidentStatus newStatus
-    ) {
+            IncidentStatus newStatus) {
         IncidentStatus previousStatus = incident.getStatus();
 
         incident.setStatus(newStatus);
@@ -141,20 +159,17 @@ public class IncidentServiceImpl implements IncidentService {
     private Incident findIncident(Long id) {
         return incidentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Incident not found with ID: " + id
-                ));
+                        "Incident not found with ID: " + id));
     }
 
     private AppUser getCurrentUser() {
-        Authentication authentication =
-                SecurityContextHolder.getContext()
-                        .getAuthentication();
+        Authentication authentication = SecurityContextHolder.getContext()
+                .getAuthentication();
 
         return appUserRepository
                 .findByEmailIgnoreCase(authentication.getName())
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Authenticated user was not found"
-                ));
+                        "Authenticated user was not found"));
     }
 
     private IncidentResponse toResponse(Incident incident) {
@@ -168,7 +183,6 @@ public class IncidentServiceImpl implements IncidentService {
                 incident.getStatus(),
                 incident.getResolvedAt(),
                 incident.getCreatedAt(),
-                incident.getUpdatedAt()
-        );
+                incident.getUpdatedAt());
     }
 }

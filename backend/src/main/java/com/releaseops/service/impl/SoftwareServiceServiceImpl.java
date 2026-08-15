@@ -13,31 +13,33 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.releaseops.service.AuditLogService;
+import java.util.Map;
 
 @Service
 @Transactional
 public class SoftwareServiceServiceImpl implements SoftwareServiceService {
 
     private final SoftwareServiceRepository serviceRepository;
+    private final AuditLogService auditLogService;
 
     public SoftwareServiceServiceImpl(
-            SoftwareServiceRepository serviceRepository
-    ) {
+            SoftwareServiceRepository serviceRepository,
+            AuditLogService auditLogService) {
         this.serviceRepository = serviceRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Override
     public ServiceResponse createService(CreateServiceRequest request) {
         if (serviceRepository.existsBySlug(request.slug())) {
             throw new DuplicateResourceException(
-                    "A service with slug '" + request.slug() + "' already exists"
-            );
+                    "A service with slug '" + request.slug() + "' already exists");
         }
         if (serviceRepository.existsByNameIgnoreCase(request.name())) {
-             throw new DuplicateResourceException(
-                     "A service named '" + request.name() + "' already exists"
-            );
-}       
+            throw new DuplicateResourceException(
+                    "A service named '" + request.name() + "' already exists");
+        }
         SoftwareService service = new SoftwareService();
         service.setName(request.name());
         service.setSlug(request.slug());
@@ -46,6 +48,14 @@ public class SoftwareServiceServiceImpl implements SoftwareServiceService {
         service.setProductionUrl(request.productionUrl());
 
         SoftwareService savedService = serviceRepository.save(service);
+        auditLogService.record(
+                "CREATED",
+                "SERVICE",
+                savedService.getId(),
+                Map.of(
+                        "name", savedService.getName(),
+                        "slug", savedService.getSlug(),
+                        "status", savedService.getStatus().name()));
         return toResponse(savedService);
     }
 
@@ -59,8 +69,7 @@ public class SoftwareServiceServiceImpl implements SoftwareServiceService {
     @Transactional(readOnly = true)
     public Page<ServiceResponse> getServices(
             ServiceStatus status,
-            Pageable pageable
-    ) {
+            Pageable pageable) {
         Page<SoftwareService> services;
 
         if (status == null) {
@@ -75,10 +84,11 @@ public class SoftwareServiceServiceImpl implements SoftwareServiceService {
     @Override
     public ServiceResponse updateService(
             Long id,
-            UpdateServiceRequest request
-    ) {
+            UpdateServiceRequest request) {
         SoftwareService service = findService(id);
-
+        ServiceStatus previousStatus = service.getStatus();
+        String previousName = service.getName();
+        String previousSlug = service.getSlug();
         if (request.name() != null) {
             service.setName(request.name());
         }
@@ -89,8 +99,7 @@ public class SoftwareServiceServiceImpl implements SoftwareServiceService {
             if (serviceRepository.existsBySlug(request.slug())) {
                 throw new DuplicateResourceException(
                         "A service with slug '" + request.slug()
-                                + "' already exists"
-                );
+                                + "' already exists");
             }
 
             service.setSlug(request.slug());
@@ -113,20 +122,42 @@ public class SoftwareServiceServiceImpl implements SoftwareServiceService {
         }
 
         SoftwareService updatedService = serviceRepository.saveAndFlush(service);
+        auditLogService.record(
+                "UPDATED",
+                "SERVICE",
+                updatedService.getId(),
+                Map.of(
+                        "previousName", previousName,
+                        "newName", updatedService.getName(),
+                        "previousSlug", previousSlug,
+                        "newSlug", updatedService.getSlug(),
+                        "previousStatus", previousStatus.name(),
+                        "newStatus", updatedService.getStatus().name()));
         return toResponse(updatedService);
     }
 
     @Override
     public void deleteService(Long id) {
         SoftwareService service = findService(id);
+
+        String serviceName = service.getName();
+        String serviceSlug = service.getSlug();
+
         serviceRepository.delete(service);
+
+        auditLogService.record(
+                "DELETED",
+                "SERVICE",
+                id,
+                Map.of(
+                        "name", serviceName,
+                        "slug", serviceSlug));
     }
 
     private SoftwareService findService(Long id) {
         return serviceRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Service not found with ID: " + id
-                ));
+                        "Service not found with ID: " + id));
     }
 
     private ServiceResponse toResponse(SoftwareService service) {
@@ -139,7 +170,6 @@ public class SoftwareServiceServiceImpl implements SoftwareServiceService {
                 service.getProductionUrl(),
                 service.getStatus(),
                 service.getCreatedAt(),
-                service.getUpdatedAt()
-        );
+                service.getUpdatedAt());
     }
 }

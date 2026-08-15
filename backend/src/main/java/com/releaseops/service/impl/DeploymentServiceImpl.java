@@ -16,7 +16,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.releaseops.service.AuditLogService;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Locale;
 
 @Service
@@ -25,25 +27,25 @@ public class DeploymentServiceImpl implements DeploymentService {
 
     private final DeploymentRepository deploymentRepository;
     private final SoftwareServiceRepository serviceRepository;
+    private final AuditLogService auditLogService;
 
     public DeploymentServiceImpl(
             DeploymentRepository deploymentRepository,
-            SoftwareServiceRepository serviceRepository
-    ) {
+            SoftwareServiceRepository serviceRepository,
+            AuditLogService auditLogService) {
         this.deploymentRepository = deploymentRepository;
         this.serviceRepository = serviceRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Override
     public DeploymentResponse createDeployment(
-            CreateDeploymentRequest request
-    ) {
+            CreateDeploymentRequest request) {
         SoftwareService service = serviceRepository
                 .findById(request.serviceId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Service not found with ID: "
-                                + request.serviceId()
-                ));
+                                + request.serviceId()));
 
         Deployment deployment = new Deployment();
         deployment.setService(service);
@@ -51,25 +53,31 @@ public class DeploymentServiceImpl implements DeploymentService {
         deployment.setCommitSha(
                 request.commitSha()
                         .trim()
-                        .toLowerCase(Locale.ROOT)
-        );
+                        .toLowerCase(Locale.ROOT));
         deployment.setEnvironment(request.environment());
         deployment.setStatus(request.status());
         deployment.setTriggeredBy(
                 SecurityContextHolder.getContext()
                         .getAuthentication()
-                        .getName()
-        );
+                        .getName());
 
         if (request.pipelineUrl() != null) {
             deployment.setPipelineRunUrl(
-                    request.pipelineUrl().trim()
-            );
+                    request.pipelineUrl().trim());
         }
 
-        Deployment savedDeployment =
-                deploymentRepository.save(deployment);
+        Deployment savedDeployment = deploymentRepository.save(deployment);
 
+        auditLogService.record(
+                "CREATED",
+                "DEPLOYMENT",
+                savedDeployment.getId(),
+                Map.of(
+                        "version", savedDeployment.getVersion(),
+                        "environment",
+                        savedDeployment.getEnvironment().name(),
+                        "status",
+                        savedDeployment.getStatus().name()));
         return toResponse(savedDeployment);
     }
 
@@ -85,59 +93,79 @@ public class DeploymentServiceImpl implements DeploymentService {
             Long serviceId,
             DeploymentStatus status,
             DeploymentEnvironment environment,
-            Pageable pageable
-    ) {
+            Pageable pageable) {
         return deploymentRepository
                 .findAllFiltered(
                         serviceId,
                         status,
                         environment,
-                        pageable
-                )
+                        pageable)
                 .map(this::toResponse);
     }
 
     @Override
     public DeploymentResponse updateDeployment(
             Long id,
-            UpdateDeploymentRequest request
-    ) {
+            UpdateDeploymentRequest request) {
         Deployment deployment = findDeployment(id);
-
+        DeploymentStatus previousStatus = deployment.getStatus();
         deployment.setStatus(request.status());
 
         if (request.durationSeconds() != null) {
             deployment.setDurationSeconds(
-                    request.durationSeconds()
-            );
+                    request.durationSeconds());
         }
 
         if (request.failureReason() != null) {
             deployment.setFailureReason(
-                    request.failureReason().trim()
-            );
+                    request.failureReason().trim());
         }
 
         if (request.status() == DeploymentStatus.SUCCESS) {
             deployment.setFailureReason(null);
         }
 
-        Deployment updatedDeployment =
-                deploymentRepository.saveAndFlush(deployment);
+        Deployment updatedDeployment = deploymentRepository.saveAndFlush(deployment);
+        Map<String, Object> auditDetails = new LinkedHashMap<>();
 
+        auditDetails.put(
+                "previousStatus",
+                previousStatus.name());
+        auditDetails.put(
+                "newStatus",
+                updatedDeployment.getStatus().name());
+        auditDetails.put(
+                "version",
+                updatedDeployment.getVersion());
+
+        if (updatedDeployment.getDurationSeconds() != null) {
+            auditDetails.put(
+                    "durationSeconds",
+                    updatedDeployment.getDurationSeconds());
+        }
+
+        if (updatedDeployment.getFailureReason() != null) {
+            auditDetails.put(
+                    "failureReason",
+                    updatedDeployment.getFailureReason());
+        }
+
+        auditLogService.record(
+                "STATUS_UPDATED",
+                "DEPLOYMENT",
+                updatedDeployment.getId(),
+                auditDetails);
         return toResponse(updatedDeployment);
     }
 
     private Deployment findDeployment(Long id) {
         return deploymentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Deployment not found with ID: " + id
-                ));
+                        "Deployment not found with ID: " + id));
     }
 
     private DeploymentResponse toResponse(
-            Deployment deployment
-    ) {
+            Deployment deployment) {
         return new DeploymentResponse(
                 deployment.getId(),
                 deployment.getService().getId(),
@@ -152,7 +180,6 @@ public class DeploymentServiceImpl implements DeploymentService {
                 deployment.getFailureReason(),
                 deployment.getDeployedAt(),
                 deployment.getCreatedAt(),
-                deployment.getUpdatedAt()
-        );
+                deployment.getUpdatedAt());
     }
 }
