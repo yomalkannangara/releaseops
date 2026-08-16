@@ -105,6 +105,9 @@ jobs:
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
+          tar -czf /tmp/releaseops-monitoring.tar.gz \
+            -C monitoring .
+
           scp -i ~/.ssh/releaseops_deploy \
             -o IdentitiesOnly=yes \
             deploy/compose.yml \
@@ -120,6 +123,10 @@ jobs:
             deploy/deploy.sh \
             "ubuntu@${DEPLOY_HOST}:/home/ubuntu/releaseops-deploy/deploy.sh"
 
+          scp -i ~/.ssh/releaseops_deploy \
+            -o IdentitiesOnly=yes \
+            /tmp/releaseops-monitoring.tar.gz \
+            "ubuntu@${DEPLOY_HOST}:/home/ubuntu/releaseops-deploy/monitoring.tar.gz.new"
       - name: Deploy exact commit with rollback
         id: production_deploy
         env:

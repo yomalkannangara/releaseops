@@ -1,4 +1,13 @@
 releaseops-yk.duckdns.org {
     encode zstd gzip
-    reverse_proxy frontend:80
+
+    redir /grafana /grafana/
+
+    handle /grafana/* {
+        reverse_proxy grafana:3000
+    }
+
+    handle {
+        reverse_proxy frontend:80
+    }
 }
