@@ -114,6 +114,10 @@ rollback() {
 handle_failure() {
     local exit_code=$?
 
+    echo "Capturing failed deployment diagnostics..."
+    compose ps || true
+    compose logs --tail=150 grafana prometheus node-exporter caddy || true
+
     if [[ "$rollback_available" == "true" ]]; then
         rollback
     else
