@@ -29,8 +29,7 @@ public class AuditLogServiceImpl implements AuditLogService {
 
     public AuditLogServiceImpl(
             AuditLogRepository auditLogRepository,
-            AppUserRepository appUserRepository
-    ) {
+            AppUserRepository appUserRepository) {
         this.auditLogRepository = auditLogRepository;
         this.appUserRepository = appUserRepository;
     }
@@ -40,8 +39,7 @@ public class AuditLogServiceImpl implements AuditLogService {
             String action,
             String entityType,
             Long entityId,
-            Map<String, Object> details
-    ) {
+            Map<String, Object> details) {
         AuditLog auditLog = new AuditLog();
 
         auditLog.setActor(getCurrentUser());
@@ -51,8 +49,7 @@ public class AuditLogServiceImpl implements AuditLogService {
         auditLog.setDetails(
                 details == null
                         ? new LinkedHashMap<>()
-                        : new LinkedHashMap<>(details)
-        );
+                        : new LinkedHashMap<>(details));
         auditLog.setIpAddress(getCurrentIpAddress());
 
         auditLogRepository.save(auditLog);
@@ -64,48 +61,49 @@ public class AuditLogServiceImpl implements AuditLogService {
             Long actorId,
             String entityType,
             String action,
-            Pageable pageable
-    ) {
+            Pageable pageable) {
         return auditLogRepository
                 .findAllFiltered(
                         actorId,
-                        entityType,
-                        action,
-                        pageable
-                )
+                        normalizeNullable(entityType),
+                        normalizeNullable(action),
+                        pageable)
                 .map(this::toResponse);
     }
 
+    private String normalizeNullable(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        return normalize(value);
+    }
+
     private AppUser getCurrentUser() {
-        Authentication authentication =
-                SecurityContextHolder.getContext()
-                        .getAuthentication();
+        Authentication authentication = SecurityContextHolder.getContext()
+                .getAuthentication();
 
         if (authentication == null
                 || !authentication.isAuthenticated()
                 || "anonymousUser".equals(
-                        authentication.getName()
-                )) {
+                        authentication.getName())) {
             return null;
         }
 
         return appUserRepository
                 .findByEmailIgnoreCase(
-                        authentication.getName()
-                )
+                        authentication.getName())
                 .orElse(null);
     }
 
     private String getCurrentIpAddress() {
-        if (!(RequestContextHolder.getRequestAttributes()
-                instanceof ServletRequestAttributes attributes)) {
+        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes)) {
             return null;
         }
 
         HttpServletRequest request = attributes.getRequest();
 
-        String forwardedFor =
-                request.getHeader("X-Forwarded-For");
+        String forwardedFor = request.getHeader("X-Forwarded-For");
 
         if (forwardedFor != null
                 && !forwardedFor.isBlank()) {
@@ -131,7 +129,6 @@ public class AuditLogServiceImpl implements AuditLogService {
                 auditLog.getEntityId(),
                 auditLog.getDetails(),
                 auditLog.getIpAddress(),
-                auditLog.getCreatedAt()
-        );
+                auditLog.getCreatedAt());
     }
 }

@@ -1,4 +1,4 @@
-package com.releaseops.repository;
+ package com.releaseops.repository;
 
 import com.releaseops.model.AuditLog;
 import org.springframework.data.domain.Page;
@@ -16,11 +16,9 @@ public interface AuditLogRepository
             WHERE (:actorId IS NULL
                     OR audit.actor.id = :actorId)
               AND (:entityType IS NULL
-                    OR LOWER(audit.entityType)
-                        = LOWER(:entityType))
+                    OR audit.entityType = :entityType)
               AND (:action IS NULL
-                    OR LOWER(audit.action)
-                        = LOWER(:action))
+                    OR audit.action = :action)
             """)
     Page<AuditLog> findAllFiltered(
             @Param("actorId") Long actorId,

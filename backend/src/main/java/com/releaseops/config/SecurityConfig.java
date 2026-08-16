@@ -14,6 +14,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.http.HttpMethod;
+import jakarta.servlet.DispatcherType;
 
 @Configuration
 @EnableMethodSecurity
@@ -36,6 +37,8 @@ public class SecurityConfig {
                         .sessionCreationPolicy(
                                 SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
+                        .dispatcherTypeMatchers(DispatcherType.ERROR)
+                        .permitAll()
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/auth/login")
