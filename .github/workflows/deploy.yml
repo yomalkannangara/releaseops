@@ -1,0 +1,91 @@
+name: Deploy Production
+
+on:
+  workflow_run:
+    workflows: ["Publish Docker Images"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    environment:
+      name: production
+      url: https://releaseops-yk.duckdns.org
+
+    steps:
+      - name: Check out deployment files
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Configure deployment SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/releaseops_deploy
+          chmod 600 ~/.ssh/releaseops_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Copy deployment configuration
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          scp -i ~/.ssh/releaseops_deploy \
+            -o IdentitiesOnly=yes \
+            deploy/compose.yml \
+            "ubuntu@${DEPLOY_HOST}:/home/ubuntu/releaseops-deploy/compose.yml.new"
+
+          scp -i ~/.ssh/releaseops_deploy \
+            -o IdentitiesOnly=yes \
+            deploy/Caddyfile \
+            "ubuntu@${DEPLOY_HOST}:/home/ubuntu/releaseops-deploy/Caddyfile.new"
+
+      - name: Deploy latest images
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh -i ~/.ssh/releaseops_deploy \
+            -o IdentitiesOnly=yes \
+            "ubuntu@${DEPLOY_HOST}" <<'REMOTE'
+          set -euo pipefail
+          cd /home/ubuntu/releaseops-deploy
+
+          docker compose \
+            --env-file .env \
+            -f compose.yml.new \
+            config --quiet
+
+          mv compose.yml.new compose.yml
+          mv Caddyfile.new Caddyfile
+
+          docker compose pull
+          docker compose up -d --remove-orphans
+          docker compose exec -T caddy \
+            caddy reload --config /etc/caddy/Caddyfile
+
+          docker compose ps
+          REMOTE
+
+      - name: Verify public website
+        run: |
+          curl --fail \
+            --retry 10 \
+            --retry-delay 3 \
+            https://releaseops-yk.duckdns.org/health
