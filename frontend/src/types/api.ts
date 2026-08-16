@@ -62,3 +62,90 @@ export interface ApiErrorResponse {
   path: string
   fieldErrors: Record<string, string>
 }
+export type ServiceStatus =
+  | 'HEALTHY'
+  | 'DEGRADED'
+  | 'DOWN'
+  | 'MAINTENANCE'
+
+export interface ServiceResponse {
+  id: number
+  name: string
+  slug: string
+  description: string | null
+  repositoryUrl: string | null
+  productionUrl: string | null
+  status: ServiceStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PageMetadata {
+  size: number
+  number: number
+  totalElements: number
+  totalPages: number
+}
+
+export interface PageResponse<T> {
+  content: T[]
+  page: PageMetadata
+}
+export type IncidentStatus =
+  | 'OPEN'
+  | 'INVESTIGATING'
+  | 'MONITORING'
+  | 'RESOLVED'
+
+export type IncidentSeverity =
+  | 'LOW'
+  | 'MEDIUM'
+  | 'HIGH'
+  | 'CRITICAL'
+
+export interface IncidentResponse {
+  id: number
+  serviceId: number
+  serviceName: string
+  title: string
+  description: string
+  severity: IncidentSeverity
+  status: IncidentStatus
+  resolvedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+export interface AuditLogResponse {
+  id: number
+  actorId: number | null
+  actorEmail: string | null
+  action: string
+  entityType: string
+  entityId: number | null
+  details: Record<string, unknown>
+  ipAddress: string | null
+  createdAt: string
+}
+
+export interface UserResponse {
+  id: number
+  email: string
+  fullName: string
+  role: Role
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateUserRequest {
+  email: string
+  fullName: string
+  password: string
+  role: Role
+}
+
+export interface UpdateUserRequest {
+  fullName?: string
+  role?: Role
+  enabled?: boolean
+}
