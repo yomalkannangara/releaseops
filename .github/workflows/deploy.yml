@@ -28,12 +28,67 @@ jobs:
 
     env:
       RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      RELEASEOPS_URL: ${{ vars.RELEASEOPS_URL }}
+      RELEASEOPS_SERVICE_ID: ${{ vars.RELEASEOPS_SERVICE_ID }}
+      RELEASEOPS_DEPLOY_EMAIL: ${{ vars.RELEASEOPS_DEPLOY_EMAIL }}
 
     steps:
       - name: Check out deployment files
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Record deployment start
+        continue-on-error: true
+        env:
+          RELEASEOPS_DEPLOY_PASSWORD: ${{ secrets.RELEASEOPS_DEPLOY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          login_payload=$(jq -n \
+            --arg email "$RELEASEOPS_DEPLOY_EMAIL" \
+            --arg password "$RELEASEOPS_DEPLOY_PASSWORD" \
+            '{email: $email, password: $password}')
+
+          login_response=$(curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "$login_payload" \
+            "$RELEASEOPS_URL/api/auth/login")
+
+          token=$(jq -er '.token' <<< "$login_response")
+          echo "::add-mask::$token"
+
+          install -m 600 /dev/null "$RUNNER_TEMP/releaseops-token"
+          printf '%s' "$token" > "$RUNNER_TEMP/releaseops-token"
+          date +%s > "$RUNNER_TEMP/deployment-started-at"
+
+          pipeline_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          version="sha-${RELEASE_SHA:0:12}"
+
+          deployment_payload=$(jq -n \
+            --argjson serviceId "$RELEASEOPS_SERVICE_ID" \
+            --arg version "$version" \
+            --arg commitSha "$RELEASE_SHA" \
+            --arg pipelineUrl "$pipeline_url" \
+            '{
+              serviceId: $serviceId,
+              version: $version,
+              commitSha: $commitSha,
+              environment: "PRODUCTION",
+              status: "IN_PROGRESS",
+              pipelineUrl: $pipelineUrl
+            }')
+
+          deployment_response=$(curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $token" \
+            -H "Content-Type: application/json" \
+            -d "$deployment_payload" \
+            "$RELEASEOPS_URL/api/deployments")
+
+          jq -er '.id' <<< "$deployment_response" \
+            > "$RUNNER_TEMP/releaseops-deployment-id"
 
       - name: Configure deployment SSH key
         env:
@@ -66,6 +121,7 @@ jobs:
             "ubuntu@${DEPLOY_HOST}:/home/ubuntu/releaseops-deploy/deploy.sh"
 
       - name: Deploy exact commit with rollback
+        id: production_deploy
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
@@ -76,8 +132,65 @@ jobs:
              /home/ubuntu/releaseops-deploy/deploy.sh '${RELEASE_SHA}'"
 
       - name: Verify public website
+        id: public_verification
         run: |
           curl --fail \
             --retry 10 \
             --retry-delay 3 \
-            https://releaseops-yk.duckdns.org/health
+            "$RELEASEOPS_URL/health"
+
+      - name: Record deployment result
+        if: always()
+        continue-on-error: true
+        env:
+          DEPLOY_OUTCOME: ${{ steps.production_deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.public_verification.outcome }}
+        run: |
+          set -euo pipefail
+
+          token_file="$RUNNER_TEMP/releaseops-token"
+          id_file="$RUNNER_TEMP/releaseops-deployment-id"
+          started_file="$RUNNER_TEMP/deployment-started-at"
+
+          if [[ ! -s "$token_file" || ! -s "$id_file" ]]; then
+            echo "::warning::Deployment record was not created; result cannot be reported."
+            exit 0
+          fi
+
+          token=$(<"$token_file")
+          deployment_id=$(<"$id_file")
+          started_at=$(<"$started_file")
+          duration_seconds=$(( $(date +%s) - started_at ))
+
+          echo "::add-mask::$token"
+
+          if [[ "$DEPLOY_OUTCOME" == "success" &&
+                "$VERIFY_OUTCOME" == "success" ]]; then
+            status="SUCCESS"
+            failure_reason=""
+          elif [[ "$DEPLOY_OUTCOME" == "failure" ]]; then
+            status="ROLLED_BACK"
+            failure_reason="Deployment failed; automatic rollback was attempted."
+          else
+            status="FAILED"
+            failure_reason="Public website verification failed."
+          fi
+
+          result_payload=$(jq -n \
+            --arg status "$status" \
+            --argjson durationSeconds "$duration_seconds" \
+            --arg failureReason "$failure_reason" \
+            '{
+              status: $status,
+              durationSeconds: $durationSeconds
+            } + if $failureReason == ""
+                then {}
+                else {failureReason: $failureReason}
+                end')
+
+          curl --fail-with-body --silent --show-error \
+            -X PATCH \
+            -H "Authorization: Bearer $token" \
+            -H "Content-Type: application/json" \
+            -d "$result_payload" \
+            "$RELEASEOPS_URL/api/deployments/$deployment_id"
