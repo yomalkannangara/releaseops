@@ -131,6 +131,17 @@ services:
     restart: unless-stopped
     networks:
       - releaseops-network
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: releaseops-node-exporter
+    command:
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro,rslave
+    restart: unless-stopped
+    networks:
+      - releaseops-network
 volumes:
   postgres_data:
   prometheus_data:

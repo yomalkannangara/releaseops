@@ -8,3 +8,7 @@ scrape_configs:
     static_configs:
       - targets:
           - backend:8080
+  - job_name: releaseops-host
+    static_configs:
+      - targets:
+          - node-exporter:9100
