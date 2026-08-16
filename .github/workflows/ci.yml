@@ -110,7 +110,6 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           format: table
-          trivyignores: .trivyignore
           scanners: vuln,secret
           skip-dirs: backend/target,frontend/node_modules
           trivy-config: ""
