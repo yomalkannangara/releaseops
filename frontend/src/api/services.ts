@@ -1,8 +1,10 @@
 import { apiClient } from './client'
 import type {
+  CreateServiceRequest,
   PageResponse,
   ServiceResponse,
   ServiceStatus,
+  UpdateServiceRequest,
 } from '../types/api'
 
 export interface ServiceFilters {
@@ -25,4 +27,33 @@ export async function getServices(
   })
 
   return response.data
+}
+
+export async function createService(
+  request: CreateServiceRequest,
+): Promise<ServiceResponse> {
+  const response = await apiClient.post<ServiceResponse>(
+    '/services',
+    request,
+  )
+
+  return response.data
+}
+
+export async function updateService(
+  id: number,
+  request: UpdateServiceRequest,
+): Promise<ServiceResponse> {
+  const response = await apiClient.patch<ServiceResponse>(
+    `/services/${id}`,
+    request,
+  )
+
+  return response.data
+}
+
+export async function deleteService(
+  id: number,
+): Promise<void> {
+  await apiClient.delete(`/services/${id}`)
 }

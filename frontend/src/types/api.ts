@@ -149,3 +149,48 @@ export interface UpdateUserRequest {
   role?: Role
   enabled?: boolean
 }
+export interface CreateServiceRequest {
+  name: string
+  slug: string
+  description?: string
+  repositoryUrl?: string
+  productionUrl?: string
+}
+
+export interface UpdateServiceRequest {
+  name?: string
+  slug?: string
+  description?: string
+  repositoryUrl?: string
+  productionUrl?: string
+  status?: ServiceStatus
+}
+
+export interface CreateIncidentRequest {
+  serviceId: number
+  title: string
+  description: string
+  severity: IncidentSeverity
+}
+
+export interface UpdateIncidentRequest {
+  title?: string
+  description?: string
+  severity?: IncidentSeverity
+  status?: IncidentStatus
+}
+
+export interface CreateDeploymentRequest {
+  serviceId: number
+  version: string
+  commitSha: string
+  environment: DeploymentEnvironment
+  status: DeploymentStatus
+  pipelineUrl?: string
+}
+
+export interface UpdateDeploymentRequest {
+  status: DeploymentStatus
+  durationSeconds?: number
+  failureReason?: string
+}

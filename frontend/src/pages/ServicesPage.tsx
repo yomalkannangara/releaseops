@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react'
-import { ExternalLink } from 'lucide-react'
-import { getServices } from '../api/services'
+import type { FormEvent } from 'react'
+import { ExternalLink, Plus } from 'lucide-react'
+import {
+  createService,
+  getServices,
+  updateService,
+} from '../api/services'
+import { useAuth } from '../auth/useAuth'
+import { Modal } from '../components/ui/Modal'
 import type {
   ServiceResponse,
   ServiceStatus,
 } from '../types/api'
+import { getApiErrorMessage } from '../utils/getApiErrorMessage'
 
 const serviceStatuses: ServiceStatus[] = [
   'HEALTHY',
@@ -14,13 +22,28 @@ const serviceStatuses: ServiceStatus[] = [
 ]
 
 export function ServicesPage() {
+  const { user } = useAuth()
+  const canManage = user?.role !== 'VIEWER'
+
   const [services, setServices] = useState<ServiceResponse[]>(
     [],
   )
   const [status, setStatus] =
     useState<ServiceStatus | ''>('')
   const [isLoading, setIsLoading] = useState(true)
+  const [updatingId, setUpdatingId] =
+    useState<number | null>(null)
   const [error, setError] = useState('')
+
+  const [showCreateForm, setShowCreateForm] =
+    useState(false)
+  const [name, setName] = useState('')
+  const [slug, setSlug] = useState('')
+  const [description, setDescription] = useState('')
+  const [repositoryUrl, setRepositoryUrl] = useState('')
+  const [productionUrl, setProductionUrl] = useState('')
+  const [isCreating, setIsCreating] = useState(false)
+  const [formError, setFormError] = useState('')
 
   useEffect(() => {
     async function loadServices() {
@@ -43,6 +66,79 @@ export function ServicesPage() {
     void loadServices()
   }, [status])
 
+  async function handleCreate(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault()
+    setIsCreating(true)
+    setFormError('')
+
+    try {
+      const createdService = await createService({
+        name,
+        slug,
+        description,
+        repositoryUrl,
+        productionUrl,
+      })
+
+      setServices((current) => [
+        createdService,
+        ...current,
+      ])
+
+      setName('')
+      setSlug('')
+      setDescription('')
+      setRepositoryUrl('')
+      setProductionUrl('')
+      setShowCreateForm(false)
+    } catch (requestError) {
+      setFormError(
+        getApiErrorMessage(
+          requestError,
+          'Unable to create the service.',
+        ),
+      )
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  async function handleStatusChange(
+    service: ServiceResponse,
+    newStatus: ServiceStatus,
+  ) {
+    setUpdatingId(service.id)
+    setError('')
+
+    try {
+      const updatedService = await updateService(
+        service.id,
+        {
+          status: newStatus,
+        },
+      )
+
+      setServices((current) =>
+        current.map((item) =>
+          item.id === updatedService.id
+            ? updatedService
+            : item,
+        ),
+      )
+    } catch (requestError) {
+      setError(
+        getApiErrorMessage(
+          requestError,
+          'Unable to update the service.',
+        ),
+      )
+    } finally {
+      setUpdatingId(null)
+    }
+  }
+
   return (
     <div className="services-page">
       <header className="page-header">
@@ -51,27 +147,36 @@ export function ServicesPage() {
           <p>Monitor the services managed by ReleaseOps.</p>
         </div>
 
-        <select
-          className="filter-select"
-          value={status}
-          onChange={(event) =>
-            setStatus(
-              event.target.value as ServiceStatus | '',
-            )
-          }
-          aria-label="Filter services by status"
-        >
-          <option value="">All statuses</option>
+        <div className="header-actions">
+          <select
+            className="filter-select"
+            value={status}
+            onChange={(event) =>
+              setStatus(
+                event.target.value as ServiceStatus | '',
+              )
+            }
+          >
+            <option value="">All statuses</option>
 
-          {serviceStatuses.map((serviceStatus) => (
-            <option
-              key={serviceStatus}
-              value={serviceStatus}
+            {serviceStatuses.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+
+          {canManage && (
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setShowCreateForm(true)}
             >
-              {serviceStatus}
-            </option>
-          ))}
-        </select>
+              <Plus size={18} />
+              Add service
+            </button>
+          )}
+        </div>
       </header>
 
       <section className="content-card">
@@ -85,7 +190,7 @@ export function ServicesPage() {
           <p>No services found.</p>
         )}
 
-        {!isLoading && !error && services.length > 0 && (
+        {!isLoading && services.length > 0 && (
           <div className="table-wrapper">
             <table>
               <thead>
@@ -105,14 +210,38 @@ export function ServicesPage() {
                     <td>
                       <strong>{service.name}</strong>
                     </td>
+
                     <td>{service.slug}</td>
+
                     <td>
-                      <span
-                        className={`status-badge service-status-${service.status.toLowerCase()}`}
-                      >
-                        {service.status}
-                      </span>
+                      {canManage ? (
+                        <select
+                          className="compact-select"
+                          value={service.status}
+                          disabled={updatingId === service.id}
+                          onChange={(event) =>
+                            void handleStatusChange(
+                              service,
+                              event.target
+                                .value as ServiceStatus,
+                            )
+                          }
+                        >
+                          {serviceStatuses.map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span
+                          className={`status-badge service-status-${service.status.toLowerCase()}`}
+                        >
+                          {service.status}
+                        </span>
+                      )}
                     </td>
+
                     <td>
                       {service.repositoryUrl ? (
                         <a
@@ -127,6 +256,7 @@ export function ServicesPage() {
                         '—'
                       )}
                     </td>
+
                     <td>
                       {service.productionUrl ? (
                         <a
@@ -141,6 +271,7 @@ export function ServicesPage() {
                         '—'
                       )}
                     </td>
+
                     <td>
                       {new Date(
                         service.updatedAt,
@@ -153,6 +284,108 @@ export function ServicesPage() {
           </div>
         )}
       </section>
+
+      {showCreateForm && (
+        <Modal
+          title="Add service"
+          description="Register a software service in ReleaseOps."
+          onClose={() => setShowCreateForm(false)}
+        >
+          <form
+            className="form-grid"
+            onSubmit={handleCreate}
+          >
+            <label htmlFor="service-name">Name</label>
+            <input
+              id="service-name"
+              value={name}
+              maxLength={120}
+              required
+              onChange={(event) =>
+                setName(event.target.value)
+              }
+            />
+
+            <label htmlFor="service-slug">Slug</label>
+            <input
+              id="service-slug"
+              value={slug}
+              maxLength={120}
+              pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+              placeholder="example-service"
+              required
+              onChange={(event) =>
+                setSlug(event.target.value)
+              }
+            />
+
+            <label htmlFor="service-description">
+              Description
+            </label>
+            <textarea
+              id="service-description"
+              value={description}
+              maxLength={5000}
+              rows={3}
+              onChange={(event) =>
+                setDescription(event.target.value)
+              }
+            />
+
+            <label htmlFor="repository-url">
+              Repository URL
+            </label>
+            <input
+              id="repository-url"
+              type="url"
+              value={repositoryUrl}
+              maxLength={500}
+              onChange={(event) =>
+                setRepositoryUrl(event.target.value)
+              }
+            />
+
+            <label htmlFor="production-url">
+              Production URL
+            </label>
+            <input
+              id="production-url"
+              type="url"
+              value={productionUrl}
+              maxLength={500}
+              onChange={(event) =>
+                setProductionUrl(event.target.value)
+              }
+            />
+
+            {formError && (
+              <div className="form-error" role="alert">
+                {formError}
+              </div>
+            )}
+
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setShowCreateForm(false)}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={isCreating}
+              >
+                {isCreating
+                  ? 'Creating…'
+                  : 'Create service'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   )
 }

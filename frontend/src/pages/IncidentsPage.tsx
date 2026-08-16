@@ -1,10 +1,21 @@
 import { useEffect, useState } from 'react'
-import { getIncidents } from '../api/incidents'
+import type { FormEvent } from 'react'
+import { Plus } from 'lucide-react'
+import {
+  createIncident,
+  getIncidents,
+  updateIncident,
+} from '../api/incidents'
+import { getServices } from '../api/services'
+import { useAuth } from '../auth/useAuth'
+import { Modal } from '../components/ui/Modal'
 import type {
   IncidentResponse,
   IncidentSeverity,
   IncidentStatus,
+  ServiceResponse,
 } from '../types/api'
+import { getApiErrorMessage } from '../utils/getApiErrorMessage'
 
 const statuses: IncidentStatus[] = [
   'OPEN',
@@ -21,15 +32,53 @@ const severities: IncidentSeverity[] = [
 ]
 
 export function IncidentsPage() {
+  const { user } = useAuth()
+  const canManage = user?.role !== 'VIEWER'
+
   const [incidents, setIncidents] = useState<
     IncidentResponse[]
+  >([])
+  const [services, setServices] = useState<
+    ServiceResponse[]
   >([])
   const [status, setStatus] =
     useState<IncidentStatus | ''>('')
   const [severity, setSeverity] =
     useState<IncidentSeverity | ''>('')
   const [isLoading, setIsLoading] = useState(true)
+  const [updatingId, setUpdatingId] =
+    useState<number | null>(null)
   const [error, setError] = useState('')
+
+  const [showCreateForm, setShowCreateForm] =
+    useState(false)
+  const [serviceId, setServiceId] = useState('')
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [newSeverity, setNewSeverity] =
+    useState<IncidentSeverity>('MEDIUM')
+  const [isCreating, setIsCreating] = useState(false)
+  const [formError, setFormError] = useState('')
+
+  useEffect(() => {
+    async function loadServices() {
+      try {
+        const response = await getServices({
+          size: 100,
+        })
+
+        setServices(response.content)
+
+        if (response.content.length > 0) {
+          setServiceId(String(response.content[0].id))
+        }
+      } catch {
+        setError('Unable to load services.')
+      }
+    }
+
+    void loadServices()
+  }, [])
 
   useEffect(() => {
     async function loadIncidents() {
@@ -53,6 +102,76 @@ export function IncidentsPage() {
     void loadIncidents()
   }, [status, severity])
 
+  async function handleCreate(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault()
+    setIsCreating(true)
+    setFormError('')
+
+    try {
+      const createdIncident = await createIncident({
+        serviceId: Number(serviceId),
+        title,
+        description,
+        severity: newSeverity,
+      })
+
+      setIncidents((current) => [
+        createdIncident,
+        ...current,
+      ])
+
+      setTitle('')
+      setDescription('')
+      setNewSeverity('MEDIUM')
+      setShowCreateForm(false)
+    } catch (requestError) {
+      setFormError(
+        getApiErrorMessage(
+          requestError,
+          'Unable to create the incident.',
+        ),
+      )
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  async function handleStatusChange(
+    incident: IncidentResponse,
+    newStatus: IncidentStatus,
+  ) {
+    setUpdatingId(incident.id)
+    setError('')
+
+    try {
+      const updatedIncident = await updateIncident(
+        incident.id,
+        {
+          status: newStatus,
+        },
+      )
+
+      setIncidents((current) =>
+        current.map((item) =>
+          item.id === updatedIncident.id
+            ? updatedIncident
+            : item,
+        ),
+      )
+    } catch (requestError) {
+      setError(
+        getApiErrorMessage(
+          requestError,
+          'Unable to update the incident.',
+        ),
+      )
+    } finally {
+      setUpdatingId(null)
+    }
+  }
+
   return (
     <div className="incidents-page">
       <header className="page-header">
@@ -61,7 +180,7 @@ export function IncidentsPage() {
           <p>Track and monitor operational incidents.</p>
         </div>
 
-        <div className="filter-group">
+        <div className="header-actions">
           <select
             className="filter-select"
             value={status}
@@ -70,9 +189,9 @@ export function IncidentsPage() {
                 event.target.value as IncidentStatus | '',
               )
             }
-            aria-label="Filter incidents by status"
           >
             <option value="">All statuses</option>
+
             {statuses.map((item) => (
               <option key={item} value={item}>
                 {item}
@@ -90,15 +209,27 @@ export function IncidentsPage() {
                   | '',
               )
             }
-            aria-label="Filter incidents by severity"
           >
             <option value="">All severities</option>
+
             {severities.map((item) => (
               <option key={item} value={item}>
                 {item}
               </option>
             ))}
           </select>
+
+          {canManage && (
+            <button
+              type="button"
+              className="primary-button"
+              disabled={services.length === 0}
+              onClick={() => setShowCreateForm(true)}
+            >
+              <Plus size={18} />
+              Add incident
+            </button>
+          )}
         </div>
       </header>
 
@@ -113,7 +244,7 @@ export function IncidentsPage() {
           <p>No incidents found.</p>
         )}
 
-        {!isLoading && !error && incidents.length > 0 && (
+        {!isLoading && incidents.length > 0 && (
           <div className="table-wrapper">
             <table>
               <thead>
@@ -133,7 +264,9 @@ export function IncidentsPage() {
                     <td>
                       <strong>{incident.title}</strong>
                     </td>
+
                     <td>{incident.serviceName}</td>
+
                     <td>
                       <span
                         className={`status-badge severity-${incident.severity.toLowerCase()}`}
@@ -141,18 +274,44 @@ export function IncidentsPage() {
                         {incident.severity}
                       </span>
                     </td>
+
                     <td>
-                      <span
-                        className={`status-badge incident-status-${incident.status.toLowerCase()}`}
-                      >
-                        {incident.status}
-                      </span>
+                      {canManage ? (
+                        <select
+                          className="compact-select"
+                          value={incident.status}
+                          disabled={
+                            updatingId === incident.id
+                          }
+                          onChange={(event) =>
+                            void handleStatusChange(
+                              incident,
+                              event.target
+                                .value as IncidentStatus,
+                            )
+                          }
+                        >
+                          {statuses.map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span
+                          className={`status-badge incident-status-${incident.status.toLowerCase()}`}
+                        >
+                          {incident.status}
+                        </span>
+                      )}
                     </td>
+
                     <td>
                       {new Date(
                         incident.createdAt,
                       ).toLocaleString()}
                     </td>
+
                     <td>
                       {incident.resolvedAt
                         ? new Date(
@@ -167,6 +326,110 @@ export function IncidentsPage() {
           </div>
         )}
       </section>
+
+      {showCreateForm && (
+        <Modal
+          title="Add incident"
+          description="Report an operational issue."
+          onClose={() => setShowCreateForm(false)}
+        >
+          <form
+            className="form-grid"
+            onSubmit={handleCreate}
+          >
+            <label htmlFor="incident-service">
+              Service
+            </label>
+            <select
+              id="incident-service"
+              value={serviceId}
+              required
+              onChange={(event) =>
+                setServiceId(event.target.value)
+              }
+            >
+              {services.map((service) => (
+                <option
+                  key={service.id}
+                  value={service.id}
+                >
+                  {service.name}
+                </option>
+              ))}
+            </select>
+
+            <label htmlFor="incident-title">Title</label>
+            <input
+              id="incident-title"
+              value={title}
+              required
+              maxLength={200}
+              onChange={(event) =>
+                setTitle(event.target.value)
+              }
+            />
+
+            <label htmlFor="incident-description">
+              Description
+            </label>
+            <textarea
+              id="incident-description"
+              value={description}
+              required
+              maxLength={10000}
+              rows={4}
+              onChange={(event) =>
+                setDescription(event.target.value)
+              }
+            />
+
+            <label htmlFor="incident-severity">
+              Severity
+            </label>
+            <select
+              id="incident-severity"
+              value={newSeverity}
+              onChange={(event) =>
+                setNewSeverity(
+                  event.target.value as IncidentSeverity,
+                )
+              }
+            >
+              {severities.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+
+            {formError && (
+              <div className="form-error" role="alert">
+                {formError}
+              </div>
+            )}
+
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setShowCreateForm(false)}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={isCreating || !serviceId}
+              >
+                {isCreating
+                  ? 'Creating…'
+                  : 'Create incident'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   )
 }

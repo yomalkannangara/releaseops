@@ -1,9 +1,11 @@
 import { apiClient } from './client'
 import type {
+  CreateIncidentRequest,
   IncidentResponse,
   IncidentSeverity,
   IncidentStatus,
   PageResponse,
+  UpdateIncidentRequest,
 } from '../types/api'
 
 export interface IncidentFilters {
@@ -28,6 +30,29 @@ export async function getIncidents(
       size: filters.size ?? 20,
     },
   })
+
+  return response.data
+}
+
+export async function createIncident(
+  request: CreateIncidentRequest,
+): Promise<IncidentResponse> {
+  const response = await apiClient.post<IncidentResponse>(
+    '/incidents',
+    request,
+  )
+
+  return response.data
+}
+
+export async function updateIncident(
+  id: number,
+  request: UpdateIncidentRequest,
+): Promise<IncidentResponse> {
+  const response = await apiClient.patch<IncidentResponse>(
+    `/incidents/${id}`,
+    request,
+  )
 
   return response.data
 }
