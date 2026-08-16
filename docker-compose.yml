@@ -36,6 +36,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
       SERVER_PORT: 8080
+      JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Colombo
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     depends_on:
