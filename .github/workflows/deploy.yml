@@ -20,11 +20,14 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     environment:
       name: production
       url: https://releaseops-yk.duckdns.org
+
+    env:
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
     steps:
       - name: Check out deployment files
@@ -43,7 +46,7 @@ jobs:
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      - name: Copy deployment configuration
+      - name: Copy deployment files
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
@@ -57,31 +60,20 @@ jobs:
             deploy/Caddyfile \
             "ubuntu@${DEPLOY_HOST}:/home/ubuntu/releaseops-deploy/Caddyfile.new"
 
-      - name: Deploy latest images
+          scp -i ~/.ssh/releaseops_deploy \
+            -o IdentitiesOnly=yes \
+            deploy/deploy.sh \
+            "ubuntu@${DEPLOY_HOST}:/home/ubuntu/releaseops-deploy/deploy.sh"
+
+      - name: Deploy exact commit with rollback
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           ssh -i ~/.ssh/releaseops_deploy \
             -o IdentitiesOnly=yes \
-            "ubuntu@${DEPLOY_HOST}" <<'REMOTE'
-          set -euo pipefail
-          cd /home/ubuntu/releaseops-deploy
-
-          docker compose \
-            --env-file .env \
-            -f compose.yml.new \
-            config --quiet
-
-          mv compose.yml.new compose.yml
-          mv Caddyfile.new Caddyfile
-
-          docker compose pull
-          docker compose up -d --remove-orphans
-          docker compose exec -T caddy \
-            caddy reload --config /etc/caddy/Caddyfile
-
-          docker compose ps
-          REMOTE
+            "ubuntu@${DEPLOY_HOST}" \
+            "chmod 700 /home/ubuntu/releaseops-deploy/deploy.sh && \
+             /home/ubuntu/releaseops-deploy/deploy.sh '${RELEASE_SHA}'"
 
       - name: Verify public website
         run: |

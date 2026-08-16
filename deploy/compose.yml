@@ -33,9 +33,8 @@ services:
       - releaseops-network
 
   backend:
-    image: ghcr.io/yomalkannangara/releaseops-backend:latest
+    image: ${BACKEND_IMAGE:-ghcr.io/yomalkannangara/releaseops-backend:latest}
     container_name: releaseops-backend
-    pull_policy: always
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
@@ -66,9 +65,8 @@ services:
       - releaseops-network
 
   frontend:
-    image: ghcr.io/yomalkannangara/releaseops-frontend:latest
+    image: ${FRONTEND_IMAGE:-ghcr.io/yomalkannangara/releaseops-frontend:latest}
     container_name: releaseops-frontend
-    pull_policy: always
     expose:
       - "80"
     depends_on:
