@@ -10,22 +10,26 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface IncidentRepository
-        extends JpaRepository<Incident, Long> {
+                extends JpaRepository<Incident, Long> {
+        long countByStatusNot(IncidentStatus status);
 
-    @Query("""
-            SELECT incident
-            FROM Incident incident
-            WHERE (:serviceId IS NULL
-                    OR incident.service.id = :serviceId)
-              AND (:status IS NULL
-                    OR incident.status = :status)
-              AND (:severity IS NULL
-                    OR incident.severity = :severity)
-            """)
-    Page<Incident> findAllFiltered(
-            @Param("serviceId") Long serviceId,
-            @Param("status") IncidentStatus status,
-            @Param("severity") IncidentSeverity severity,
-            Pageable pageable
-    );
+        long countBySeverityAndStatusNot(
+                        IncidentSeverity severity,
+                        IncidentStatus status);
+
+        @Query("""
+                        SELECT incident
+                        FROM Incident incident
+                        WHERE (:serviceId IS NULL
+                                OR incident.service.id = :serviceId)
+                          AND (:status IS NULL
+                                OR incident.status = :status)
+                          AND (:severity IS NULL
+                                OR incident.severity = :severity)
+                        """)
+        Page<Incident> findAllFiltered(
+                        @Param("serviceId") Long serviceId,
+                        @Param("status") IncidentStatus status,
+                        @Param("severity") IncidentSeverity severity,
+                        Pageable pageable);
 }

@@ -20,6 +20,7 @@ import com.releaseops.service.AuditLogService;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Locale;
+import java.util.List;
 
 @Service
 @Transactional
@@ -156,6 +157,16 @@ public class DeploymentServiceImpl implements DeploymentService {
                 updatedDeployment.getId(),
                 auditDetails);
         return toResponse(updatedDeployment);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DeploymentResponse> getRecentDeployments() {
+        return deploymentRepository
+                .findTop5ByOrderByDeployedAtDesc()
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     private Deployment findDeployment(Long id) {
