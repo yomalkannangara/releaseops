@@ -99,7 +99,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Validate Compose configuration
-        run: docker compose config --quiet
+        run: GRAFANA_ADMIN_PASSWORD=ci-validation-only docker compose config --quiet
 
       - name: Build application images
         run: docker compose build
