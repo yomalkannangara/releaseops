@@ -13,7 +13,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
-
+import org.springframework.http.HttpMethod;
 
 @Configuration
 @EnableMethodSecurity
@@ -22,59 +22,47 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     public SecurityConfig(
-            JwtAuthenticationFilter jwtAuthenticationFilter
-    ) {
+            JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(
-            HttpSecurity http
-    ) throws Exception {
+            HttpSecurity http) throws Exception {
 
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(
-                                SessionCreationPolicy.STATELESS
-                        )
-                )
+                                SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/auth/login")
+                        .permitAll().requestMatchers(
                                 "/actuator/health",
-                                "/actuator/info"
-                        ).permitAll()
-                        .anyRequest().authenticated()
-                )
+                                "/actuator/info")
+                        .permitAll()
+                        .anyRequest().authenticated())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(
-                                (request, response, authException) ->
-                                        response.sendError(
-                                                HttpServletResponse.SC_UNAUTHORIZED,
-                                                "Unauthorized"
-                                        )
-                        )
+                                (request, response, authException) -> response.sendError(
+                                        HttpServletResponse.SC_UNAUTHORIZED,
+                                        "Unauthorized"))
                         .accessDeniedHandler(
-                                (request, response, accessDeniedException) ->
-                                        response.sendError(
-                                                HttpServletResponse.SC_FORBIDDEN,
-                                                "Forbidden"
-                                        )
-                        )
-                )
+                                (request, response, accessDeniedException) -> response.sendError(
+                                        HttpServletResponse.SC_FORBIDDEN,
+                                        "Forbidden")))
                 .addFilterBefore(
                         jwtAuthenticationFilter,
-                        UsernamePasswordAuthenticationFilter.class
-                );
+                        UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
     @Bean
     public AuthenticationManager authenticationManager(
-            AuthenticationConfiguration configuration
-    ) throws Exception {
+            AuthenticationConfiguration configuration) throws Exception {
         return configuration.getAuthenticationManager();
     }
 

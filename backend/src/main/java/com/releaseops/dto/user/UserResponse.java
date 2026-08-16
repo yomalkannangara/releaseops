@@ -2,7 +2,7 @@ package com.releaseops.dto.user;
 
 import com.releaseops.model.Role;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record UserResponse(
         Long id,
@@ -10,7 +10,7 @@ public record UserResponse(
         String fullName,
         Role role,
         boolean enabled,
-        LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        Instant createdAt,
+        Instant updatedAt
 ) {
 }

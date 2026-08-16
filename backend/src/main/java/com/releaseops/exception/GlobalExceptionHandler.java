@@ -18,76 +18,78 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleNotFound(
             ResourceNotFoundException exception,
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
         return buildResponse(
                 HttpStatus.NOT_FOUND,
                 exception.getMessage(),
                 request.getRequestURI(),
-                Map.of()
-        );
+                Map.of());
     }
 
     @ExceptionHandler(DuplicateResourceException.class)
     public ResponseEntity<ApiErrorResponse> handleDuplicate(
             DuplicateResourceException exception,
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
         return buildResponse(
                 HttpStatus.CONFLICT,
                 exception.getMessage(),
                 request.getRequestURI(),
-                Map.of()
-        );
+                Map.of());
     }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiErrorResponse> handleAccessDenied(
             AccessDeniedException exception,
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
         return buildResponse(
                 HttpStatus.FORBIDDEN,
                 "You do not have permission to perform this action",
                 request.getRequestURI(),
-                Map.of()
-        );
+                Map.of());
     }
-        @ExceptionHandler(MethodArgumentNotValidException.class)
+
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<ApiErrorResponse> handleBadRequest(
+            BadRequestException exception,
+            HttpServletRequest request) {
+        return buildResponse(
+                HttpStatus.BAD_REQUEST,
+                exception.getMessage(),
+                request.getRequestURI(),
+                Map.of());
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> handleValidation(
             MethodArgumentNotValidException exception,
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
         Map<String, String> fieldErrors = new LinkedHashMap<>();
 
         exception.getBindingResult()
                 .getFieldErrors()
                 .forEach(error -> fieldErrors.putIfAbsent(
                         error.getField(),
-                        error.getDefaultMessage()
-                ));
+                        error.getDefaultMessage()));
 
         return buildResponse(
                 HttpStatus.BAD_REQUEST,
                 "Request validation failed",
                 request.getRequestURI(),
-                fieldErrors
-        );
+                fieldErrors);
     }
 
     private ResponseEntity<ApiErrorResponse> buildResponse(
             HttpStatus status,
             String message,
             String path,
-            Map<String, String> fieldErrors
-    ) {
+            Map<String, String> fieldErrors) {
         ApiErrorResponse response = new ApiErrorResponse(
                 LocalDateTime.now(),
                 status.value(),
                 status.getReasonPhrase(),
                 message,
                 path,
-                fieldErrors
-        );
+                fieldErrors);
 
         return ResponseEntity.status(status).body(response);
     }
