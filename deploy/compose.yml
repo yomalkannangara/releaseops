@@ -1,0 +1,112 @@
+name: releaseops
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: releaseops-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=32MB
+      - -c
+      - max_connections=20
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=16MB
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 192m
+    restart: unless-stopped
+    networks:
+      - releaseops-network
+
+  backend:
+    image: ghcr.io/yomalkannangara/releaseops-backend:latest
+    container_name: releaseops-backend
+    pull_policy: always
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
+      SERVER_PORT: 8080
+      JAVA_TOOL_OPTIONS: >-
+        -Xms96m
+        -Xmx256m
+        -XX:MaxMetaspaceSize=128m
+        -XX:+UseSerialGC
+        -Duser.timezone=Asia/Colombo
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q --spider http://localhost:8080/actuator/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    mem_limit: 480m
+    restart: unless-stopped
+    networks:
+      - releaseops-network
+
+  frontend:
+    image: ghcr.io/yomalkannangara/releaseops-frontend:latest
+    container_name: releaseops-frontend
+    pull_policy: always
+    expose:
+      - "80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q --spider http://127.0.0.1/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    mem_limit: 64m
+    restart: unless-stopped
+    networks:
+      - releaseops-network
+  caddy:
+    image: caddy:2-alpine
+    container_name: releaseops-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    mem_limit: 64m
+    restart: unless-stopped
+    networks:
+      - releaseops-network
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+networks:
+  releaseops-network:
+    driver: bridge
