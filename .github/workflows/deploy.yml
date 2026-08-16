@@ -105,28 +105,33 @@ jobs:
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
+          set -euo pipefail
+
           tar -czf /tmp/releaseops-monitoring.tar.gz \
             -C monitoring .
 
-          scp -i ~/.ssh/releaseops_deploy \
-            -o IdentitiesOnly=yes \
-            deploy/compose.yml \
-            "ubuntu@${DEPLOY_HOST}:/home/ubuntu/releaseops-deploy/compose.yml.new"
+          for attempt in 1 2 3 4 5; do
+            echo "SCP attempt $attempt..."
 
-          scp -i ~/.ssh/releaseops_deploy \
-            -o IdentitiesOnly=yes \
-            deploy/Caddyfile \
-            "ubuntu@${DEPLOY_HOST}:/home/ubuntu/releaseops-deploy/Caddyfile.new"
+            if scp \
+              -i ~/.ssh/releaseops_deploy \
+              -o IdentitiesOnly=yes \
+              -o ConnectTimeout=15 \
+              -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=3 \
+              deploy/compose.yml \
+              deploy/Caddyfile \
+              deploy/deploy.sh \
+              /tmp/releaseops-monitoring.tar.gz \
+              "ubuntu@${DEPLOY_HOST}:/home/ubuntu/releaseops-deploy/"; then
+                exit 0
+            fi
 
-          scp -i ~/.ssh/releaseops_deploy \
-            -o IdentitiesOnly=yes \
-            deploy/deploy.sh \
-            "ubuntu@${DEPLOY_HOST}:/home/ubuntu/releaseops-deploy/deploy.sh"
+            sleep 10
+          done
 
-          scp -i ~/.ssh/releaseops_deploy \
-            -o IdentitiesOnly=yes \
-            /tmp/releaseops-monitoring.tar.gz \
-            "ubuntu@${DEPLOY_HOST}:/home/ubuntu/releaseops-deploy/monitoring.tar.gz.new"
+          echo "Deployment file transfer failed after 5 attempts."
+          exit 1
       - name: Deploy exact commit with rollback
         id: production_deploy
         env:
