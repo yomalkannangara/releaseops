@@ -82,13 +82,47 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+  security-scan:
+    name: Security scan
+    runs-on: ubuntu-latest
 
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Resolve Maven dependencies
+        working-directory: backend
+        run: ./mvnw dependency:resolve
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+          trivyignores: .trivyignore
+          scanners: vuln,secret
+          skip-dirs: backend/target,frontend/node_modules
+          trivy-config: ""
+        env:
+          TRIVY_OFFLINE_SCAN: "true"
   docker-build:
     name: Docker build
     runs-on: ubuntu-latest
     needs:
       - backend-tests
       - frontend-checks
+      - security-scan
 
     env:
       POSTGRES_PASSWORD: releaseops_ci_password
