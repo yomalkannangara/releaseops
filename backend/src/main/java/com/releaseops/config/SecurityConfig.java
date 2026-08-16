@@ -44,7 +44,8 @@ public class SecurityConfig {
                                 "/api/auth/login")
                         .permitAll().requestMatchers(
                                 "/actuator/health",
-                                "/actuator/info")
+                                "/actuator/info",
+                                "/actuator/prometheus")
                         .permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exception -> exception
